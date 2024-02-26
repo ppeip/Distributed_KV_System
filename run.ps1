@@ -12,24 +12,43 @@ foreach ($process in $serverProcesses) {
 }  
 #>
 
-go build -o server
+go build -o server.exe
+
+#Start-Sleep -Seconds 2 
+<#
 ./server -port=8001 
 ./server -port=8002 
 ./server -port=8003 -api=1 
+#>
 
-Start-Process -FilePath ".\server.exe" -ArgumentList "-port=8001"
-Start-Process -FilePath ".\server.exe" -ArgumentList "-port=8002"
-Start-Process -FilePath ".\server.exe" -ArgumentList "-port=8003"
+$server8001 = Start-Process -FilePath ".\server.exe" -ArgumentList "-port=8001" -PassThru  
+$server8002 = Start-Process -FilePath ".\server.exe" -ArgumentList "-port=8002" -PassThru  
+$server8003 = Start-Process -FilePath ".\server.exe" -ArgumentList "-port=8003 -api=1" -PassThru  
 # 等待服务器进程启动  
+
 Start-Sleep -Seconds 2  
   
 # 执行 HTTP 请求  
 
   
-curl "http://localhost:9999/api?key=Tom" "&"
-curl "http://localhost:9999/api?key=Tom" "&"
-curl "http://localhost:9999/api?key=Tom" &
-  
+curl "http://localhost:9999/api?key=Tom" 
+curl "http://localhost:9999/api?key=Tom" 
+curl "http://localhost:9999/api?key=Tom" 
+curl "http://localhost:9999/api?key=Tom" 
+curl "http://localhost:9999/api?key=Tom" 
+curl "http://localhost:9999/api?key=Tom" 
+curl "http://localhost:9999/api?key=Tom" 
+
+$server8001.WaitForExit()  
+$server8002.WaitForExit()  
+$server8003.WaitForExit()  
+if ($server8001.HasExited) {  
+    $server8001.Close()  
+    Remove-Item ".\server.exe"  
+}  
+
+
+#Remove-item server -Force
 # 清理（如果需要的话）  
 # PowerShell 没有类似于 Bash 中 EXIT trap 的功能，但可以在脚本结束时执行清理操作  
 # 例如，如果需要删除某个文件，可以在脚本的末尾添加相应的命令  
