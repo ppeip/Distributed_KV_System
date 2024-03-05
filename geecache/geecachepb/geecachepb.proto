@@ -12,6 +12,6 @@ message Response {
     bytes value = 1;
 }
 
-service GroupCache {
+service GroupCacheService {
     rpc Get(Request) returns (Response);
 }

@@ -10,50 +10,54 @@ import (
 type Hash func(data []byte) uint32
 
 // Map constains all hashed keys
-type Map struct {
-	hash     Hash  //hash函数
-	replicas int   //虚拟节点倍数
-	keys     []int // Sorts
-	hashMap  map[int]string
+type ConsistentHash struct {
+	hash         Hash  //hash函数
+	replicas     int   //虚拟节点倍数
+	virtualNodes []int // Sorts
+	hashMap      map[int]string
 }
 
-// New creates a Map instance(default hash crc32.ChecksumIEEE)
-func New(replicas int, fn Hash) *Map {
-	m := &Map{
+// 实例哈希环
+func New(replicas int, fn Hash) *ConsistentHash {
+	// 默认hash函数为crc32.ChecksumIEEE
+	if fn == nil {
+		fn = crc32.ChecksumIEEE
+	}
+	ch := &ConsistentHash{
 		replicas: replicas,
 		hash:     fn,
 		hashMap:  make(map[int]string),
 	}
-	if m.hash == nil {
-		m.hash = crc32.ChecksumIEEE
-	}
-	return m
+
+	return ch
 }
 
 // 添加真实节点
-func (m *Map) Add(keys ...string) {
-	for _, key := range keys {
-		for i := 0; i < m.replicas; i++ {
-			// 虚拟节点的名称是：strconv.Itoa(i) + key ，在计算哈希值，然后添加到环上
-			hash := int(m.hash([]byte(strconv.Itoa(i) + key)))
-			m.keys = append(m.keys, hash)
-			m.hashMap[hash] = key //记录虚拟节点对真实节点的映射
+func (ch *ConsistentHash) AddTrueNode(nodes ...string) {
+	for _, node := range nodes {
+		for i := 0; i < ch.replicas; i++ {
+			// 虚拟节点的名称是： key + strconv.Itoa(i)，在计算哈希值，然后添加到环上
+			hash := int(ch.hash([]byte(node + strconv.Itoa(i))))
+			ch.virtualNodes = append(ch.virtualNodes, hash)
+			ch.hashMap[hash] = node //记录虚拟节点对真实节点的映射
 		}
 	}
-	sort.Ints(m.keys)
+	sort.Ints(ch.virtualNodes)
 }
 
-// Get gets the closest item in the hash to the provided key.
-func (m *Map) Get(key string) string {
-	if len(m.keys) == 0 {
+// 选择真实节点
+func (ch *ConsistentHash) GetTrueNode(key string) string {
+	if len(ch.virtualNodes) == 0 {
 		return ""
 	}
 
-	hash := int(m.hash([]byte(key)))
+	hash := int(ch.hash([]byte(key)))
 	// Binary search for appropriate replicas.
-	idx := sort.Search(len(m.keys), func(i int) bool {
-		return m.keys[i] >= hash
+	idx := sort.Search(len(ch.virtualNodes), func(i int) bool {
+		return ch.virtualNodes[i] >= hash
 	})
 
-	return m.hashMap[m.keys[idx%len(m.keys)]]
+	return ch.hashMap[ch.virtualNodes[idx%len(ch.virtualNodes)]]
 }
+
+// 删除节点

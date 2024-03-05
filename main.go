@@ -53,6 +53,40 @@ func startAPIServer(apiAddr string, gee *geecache.Group) {
 	log.Fatal(http.ListenAndServe(apiAddr[7:], nil))
 }
 
+func startCacheServerGrpc(addr string, addrs []string, gee *geecache.Group) {
+	peers := geecache.NewGrpcPool(addr)
+	peers.Set(addrs...)
+	gee.RegisterPeers(peers)
+	log.Println("geecache is running at", addr)
+	peers.Run()
+}
+
+func startGRPCServer() {
+	var port int
+	var api bool
+	flag.IntVar(&port, "port", 8001, "Geecache server port")
+	flag.BoolVar(&api, "api", false, "Start a api server?")
+	flag.Parse()
+
+	apiAddr := "http://localhost:9999"
+	addrMap := map[int]string{
+		8001: ":8001",
+		8002: ":8002",
+		8003: ":8003",
+	}
+
+	var addrs []string
+	for _, v := range addrMap {
+		addrs = append(addrs, v)
+	}
+
+	gee := createGroup()
+	if api {
+		go startAPIServer(apiAddr, gee)
+	}
+	startCacheServerGrpc(addrMap[port], addrs, gee)
+}
+
 func main() {
 	var port int
 	var api bool

@@ -2,6 +2,7 @@ package geecache
 
 import (
 	"fmt"
+	pb "geecache/geecachepb"
 	"geecache/singleflight"
 	"log"
 	"sync"
@@ -9,10 +10,10 @@ import (
 
 // A Group is a cache namespace and associated data loaded spread over
 type Group struct {
-	name      string
-	getter    Getter
-	mainCache cache
-	peers     PeerPicker
+	name      string     //分片数据组名
+	getter    Getter     //该分片数据从数据源获取数据的方法
+	mainCache cache      //底层真正存储数据的地方
+	peers     PeerPicker //选择节点
 	// use singleflight.Group to make sure that
 	// each key is only fetched once
 	loader *singleflight.Group
@@ -116,11 +117,16 @@ func (g *Group) load(key string) (value ByteView, err error) {
 
 // 从节点获取数据
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
-	bytes, err := peer.Get(g.name, key)
+	req := &pb.Request{
+		Group: g.name,
+		Key:   key,
+	}
+	res := &pb.Response{}
+	err := peer.Get(req, res)
 	if err != nil {
 		return ByteView{}, err
 	}
-	return ByteView{b: bytes}, nil
+	return ByteView{b: res.Value}, nil
 }
 
 // 从本地获取数据修改缓存
@@ -138,3 +144,4 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value)
 }
+

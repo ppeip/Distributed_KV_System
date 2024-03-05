@@ -20,11 +20,13 @@ const (
 )
 
 // HTTPPool implements PeerPicker for a pool of HTTP peers
+// HTTPPool用于管理节集群节点选取器，保存所有节点信息
+// 获取对等节点缓存时，通过计算key的“一致性哈希值”与节点的哈希值比较来选取集群中的某个节点
 type HTTPPool struct {
 	self        string
 	basePath    string
 	mu          sync.Mutex
-	peers       *consistenthash.Map
+	peers       *consistenthash.ConsistentHash
 	httpGetters map[string]*httpGetter
 }
 
@@ -77,13 +79,10 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(view.ByteSlice())
+	w.Write(body)
 }
 
-// HTTP客户端类
-type httpGetter struct {
-	baseURL string
-}
+
 
 // SET updates the pool's list of peers.
 func (p *HTTPPool) Set(peers ...string) {
@@ -91,7 +90,7 @@ func (p *HTTPPool) Set(peers ...string) {
 	defer p.mu.Unlock()
 	// default hash --> crc32.ChecksumIEEE
 	p.peers = consistenthash.New(defaultReplicas, nil)
-	p.peers.Add(peers...)
+	p.peers.AddTrueNode(peers...)
 	p.httpGetters = make(map[string]*httpGetter, len(peers))
 	for _, peer := range peers {
 		p.httpGetters[peer] = &httpGetter{baseURL: peer + p.basePath}
@@ -102,7 +101,7 @@ func (p *HTTPPool) Set(peers ...string) {
 func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if peer := p.peers.Get(key); peer != "" && peer != p.self {
+	if peer := p.peers.GetTrueNode(key); peer != "" && peer != p.self {
 		p.Log("Pick peer %s", peer)
 		return p.httpGetters[peer], true
 	}
@@ -140,8 +139,14 @@ func (h *httpGetter) Get(Group *pb.Request, out *pb.Response) ([]byte, error) {
 }
 */
 
+// HTTP客户端类
+type httpGetter struct {
+	baseURL string
+}
+
+
 // 客户端从group获取key对应的缓冲
-func (h *httpGetter) Get(in *pb.Request,out &pb.Response) error {
+func (h *httpGetter) Get(in *pb.Request, out *pb.Response) error {
 	url := fmt.Sprintf(
 		"%v%v/%v",
 		h.baseURL,
@@ -149,25 +154,25 @@ func (h *httpGetter) Get(in *pb.Request,out &pb.Response) error {
 		url.QueryEscape(in.GetKey()),
 	)
 	// 这里还是采用了http，后续要修改rpc
-	res ,err := http.Get(url)
+	res, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned: %v", res.Status)
+		return fmt.Errorf("server returned: %v", res.Status)
 	}
 
 	bytes, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body: %v", err)
+		return fmt.Errorf("reading response body: %v", err)
 	}
 
-	if err =proto.Unmarshal(bytes,out); err!=nil {
-		return fmt.Errorf("decoding response body: %v",err)
+	if err = proto.Unmarshal(bytes, out); err != nil {
+		return fmt.Errorf("decoding response body: %v", err)
 	}
-	
+
 	return nil
 }
 

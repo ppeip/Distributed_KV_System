@@ -5,11 +5,14 @@ import (
 	"sync"
 )
 
+// cache负责对lru的并发控制
 type cache struct {
 	mu         sync.Mutex
 	lru        *lru.Cache
 	cacheBytes int64
 }
+
+// 并发控制
 
 // 添加缓存
 func (c *cache) add(key string, value ByteView) {
